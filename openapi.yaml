@@ -1,0 +1,1153 @@
+# openapi.yaml
+openapi: 3.0.3
+info:
+  title: Blog API
+  version: 1.0.0
+  description: A RESTful API for managing blog posts, users, comments, and likes.
+servers:
+  - url: https://blog-api-dc2g.onrender.com/api/v1
+    description: API v1 Base Path
+tags: # Group endpoints for better organization
+  - name: Root
+    description: API Status
+  - name: Authentication
+    description: User authentication operations
+  - name: Users
+    description: User management operations
+  - name: Blogs
+    description: Blog post management
+  - name: Likes
+    description: Liking/Unliking operations
+  - name: Comments
+    description: Comment management
+
+components:
+  # --- Reusable Schemas ---
+  schemas:
+    # --- Data Models ---
+    User:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: objectid
+          description: Unique identifier for the user
+          readOnly: true
+        username:
+          type: string
+          description: User's unique username
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          description: User's unique email address
+          maxLength: 50
+        role:
+          type: string
+          enum: [admin, user]
+          description: User role
+          readOnly: true
+          default: user
+        firstName:
+          type: string
+          description: User's first name
+          maxLength: 20
+        lastName:
+          type: string
+          description: User's last name
+          maxLength: 20
+        socialLinks:
+          type: object
+          properties:
+            website:
+              type: string
+              format: url
+              maxLength: 100
+            facebook:
+              type: string
+              format: url
+              maxLength: 100
+            instagram:
+              type: string
+              format: url
+              maxLength: 100
+            linkedin:
+              type: string
+              format: url
+              maxLength: 100
+            x:
+              type: string
+              format: url
+              maxLength: 100
+            youtube:
+              type: string
+              format: url
+              maxLength: 100
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp of user creation
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp of last user update
+          readOnly: true
+      required:
+        - username
+        - email
+        - role
+
+    UserInputRequired: # For Registration/Login where password is required input
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          description: User's email address
+          maxLength: 50
+        password:
+          type: string
+          description: User's password
+          minLength: 8
+          writeOnly: true # Typically not shown in responses
+        role:
+          type: string
+          enum: [admin, user]
+          description: User role (optional for registration)
+      required:
+        - email
+        - password
+
+    UserUpdateInput: # For updating user profile
+      type: object
+      properties:
+        username:
+          type: string
+          description: User's unique username
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          description: User's unique email address
+          maxLength: 50
+        password:
+          type: string
+          description: New password (min 8 chars)
+          minLength: 8
+          writeOnly: true
+        first_name: # Note: using snake_case from request, mapping to firstName internally
+          type: string
+          description: User's first name
+          maxLength: 20
+        last_name: # Note: using snake_case from request, mapping to lastName internally
+          type: string
+          description: User's last name
+          maxLength: 20
+        website:
+          type: string
+          format: url
+          maxLength: 100
+        facebook:
+          type: string
+          format: url
+          maxLength: 100
+        instagram:
+          type: string
+          format: url
+          maxLength: 100
+        linkedin:
+          type: string
+          format: url
+          maxLength: 100
+        x:
+          type: string
+          format: url
+          maxLength: 100
+        youtube:
+          type: string
+          format: url
+          maxLength: 100
+
+    Blog:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: objectid
+          readOnly: true
+        title:
+          type: string
+          maxLength: 180
+        slug:
+          type: string
+          readOnly: true
+          description: URL-friendly identifier, automatically generated
+        content:
+          type: string
+          description: HTML content of the blog post
+        banner:
+          type: object
+          properties:
+            url:
+              type: string
+              format: url
+              description: URL of the banner image
+              readOnly: true
+            width:
+              type: integer
+              description: Width of the banner image
+              readOnly: true
+            height:
+              type: integer
+              description: Height of the banner image
+              readOnly: true
+            # publicId excluded as it's internal
+        author:
+          # Could be just ObjectId or expanded User schema
+          $ref: "#/components/schemas/User" # Referencing User schema for populated author
+          readOnly: true
+        viewsCount:
+          type: integer
+          default: 0
+          readOnly: true
+        likesCount:
+          type: integer
+          default: 0
+          readOnly: true
+        commentsCount:
+          type: integer
+          default: 0
+          readOnly: true
+        status:
+          type: string
+          enum: [draft, published]
+          default: draft
+        publishedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - title
+        - content
+        - banner
+        - author
+        - status
+
+    BlogInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 180
+        content:
+          type: string
+          description: HTML content
+        status:
+          type: string
+          enum: [draft, published]
+          default: draft
+        banner_image: # For multipart/form-data
+          type: string
+          format: binary
+          description: Banner image file (png/jpg/webp, max 2MB)
+      required:
+        - title
+        - content
+        - banner_image # Required for POST
+
+    BlogUpdateInput: # For PUT request body
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 180
+        content:
+          type: string
+          description: HTML content
+        status:
+          type: string
+          enum: [draft, published]
+        banner_image: # Optional for PUT
+          type: string
+          format: binary
+          description: New banner image file (png/jpg/webp, max 2MB)
+
+    Comment:
+      type: object
+      properties:
+        _id:
+          type: string
+          format: objectid
+          readOnly: true
+        blogId:
+          type: string
+          format: objectid
+          description: ID of the associated blog post
+        userId:
+          type: string
+          format: objectid
+          description: ID of the user who commented
+          readOnly: true # Set by server based on auth
+        content:
+          type: string
+          maxLength: 1000
+          description: The comment text
+        likesCount:
+          type: integer
+          default: 0
+          readOnly: true
+        # replies omitted as not implemented in API
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - blogId
+        - userId
+        - content
+
+    CommentInput:
+      type: object
+      properties:
+        blogId:
+          type: string
+          format: objectid
+          description: ID of the blog post to comment on
+        content:
+          type: string
+          maxLength: 1000
+          description: The comment text
+      required:
+        - blogId
+        - content
+
+    PaginatedUsers:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+
+    PaginatedBlogs:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+        blogs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Blog"
+
+    AccessTokenResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          description: JWT Access Token
+
+    LoginResponse:
+      allOf: # Combines AccessTokenResponse and User details
+        - $ref: "#/components/schemas/AccessTokenResponse"
+        - type: object
+          properties:
+            user:
+              $ref: "#/components/schemas/User" # Or a simplified User view
+
+    # --- Error Models ---
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Application-specific error code
+        message:
+          type: string
+          description: Human-readable error message
+      required:
+        - code
+        - message
+
+    ValidationErrorDetail:
+      type: object
+      properties:
+        type:
+          type: string
+        value:
+          type: string # Can be any type depending on input
+        msg:
+          type: string
+        path:
+          type: string
+        location:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [ValidationError]
+        errors:
+          type: object
+          additionalProperties: # Allows for dynamic field names like 'email', 'password'
+            $ref: "#/components/schemas/ValidationErrorDetail"
+      required:
+        - code
+        - errors
+
+  # --- Security Schemes ---
+  securitySchemes:
+    bearerAuth: # Name used in security requirement objects
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Access Token obtained via login/register/refresh
+
+  # --- Parameters (Reusable) ---
+  parameters:
+    LimitParam:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 20
+      description: Maximum number of items to return.
+      required: false
+    OffsetParam:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      description: Number of items to skip for pagination.
+      required: false
+    UserIdParam:
+      in: path
+      name: userId
+      schema:
+        type: string
+        format: objectid # Indicate it should be a MongoDB ObjectId
+      required: true
+      description: ID of the user.
+    BlogIdParam:
+      in: path
+      name: blogId
+      schema:
+        type: string
+        format: objectid
+      required: true
+      description: ID of the blog post.
+    BlogSlugParam:
+      in: path
+      name: slug
+      schema:
+        type: string
+      required: true
+      description: Slug of the blog post.
+    CommentIdParam:
+      in: path
+      name: commentId
+      schema:
+        type: string
+        format: objectid
+      required: true
+      description: ID of the comment.
+    RefreshTokenCookie:
+      in: cookie
+      name: refreshToken
+      schema:
+        type: string
+        format: jwt
+      required: true
+      description: HTTP-only refresh token cookie.
+
+  # --- Responses (Reusable) ---
+  responses:
+    Unauthorized:
+      description: Authentication information is missing or invalid (e.g., missing/expired token).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: AuthenticationError
+            message: Access denied, no token provided
+    Forbidden:
+      description: Access denied due to insufficient permissions.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: AuthorizationError
+            message: Access denied, insufficient permissions
+    NotFound:
+      description: The specified resource was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: NotFound
+            message: Resource not found
+    BadRequestValidation:
+      description: Invalid input data provided. See errors object for details.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+    ServerError:
+      description: An unexpected error occurred on the server.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            code: ServerError
+            message: Internal server error
+    NoContent:
+      description: Request successful, no response body.
+
+# --- Global Security Requirement (Applies JWT by default) ---
+security:
+  - bearerAuth: [] # Requires JWT Bearer token globally
+
+# --- API Paths ---
+paths:
+  # --- Root ---
+  /:
+    get:
+      tags: [Root]
+      summary: Get API Status
+      description: Provides basic status and information about the API.
+      operationId: getApiStatus
+      security: [] # No authentication required for this endpoint
+      responses:
+        "200":
+          description: API Status Information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  status: { type: string }
+                  version: { type: string }
+                  docs: { type: string, format: url }
+                  timestamp: { type: string, format: date-time }
+              example:
+                message: API is live
+                status: ok
+                version: 1.0.0
+                docs: https://ashutosh-3.gitbook.io/blog-api/
+                timestamp: 2025-05-06T14:30:00.000Z
+
+  # --- Authentication Paths ---
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register New User
+      description: Creates a new user account. Admin registration requires whitelisted email.
+      operationId: registerUser
+      security: [] # No authentication required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInputRequired"
+      responses:
+        "201":
+          description: User registered successfully. Sets refreshToken cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse" # Same response structure as login
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "403": # Specific case for admin registration attempt
+          description: Admin registration denied for non-whitelisted email.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: AuthorizationError
+                message: You cannot register as an admin
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login User
+      description: Authenticates a user and returns tokens.
+      operationId: loginUser
+      security: [] # No authentication required
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInputRequired"
+      responses:
+        "200":
+          description: Login successful. Sets refreshToken cookie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400": # Includes invalid credential check
+          $ref: "#/components/responses/BadRequestValidation"
+        "404": # Though validation might catch non-existing user first
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/refresh-token:
+    post:
+      tags: [Authentication]
+      summary: Refresh Access Token
+      description: Generates a new access token using the refresh token cookie.
+      operationId: refreshToken
+      security: [] # No bearer token needed, relies on cookie
+      parameters:
+        - $ref: "#/components/parameters/RefreshTokenCookie"
+      responses:
+        "200":
+          description: Access token refreshed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessTokenResponse"
+        "400": # Missing/invalid cookie
+          $ref: "#/components/responses/BadRequestValidation"
+        "401": # Invalid/expired refresh token
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout User
+      description: Invalidates the refresh token and clears the cookie. Requires both access and refresh tokens.
+      operationId: logoutUser
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/RefreshTokenCookie"
+      responses:
+        "200":
+          description: Logout successful. Clears refreshToken cookie.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+              example:
+                message: Logged out successfully
+        "400": # Missing/invalid cookie
+          $ref: "#/components/responses/BadRequestValidation"
+        "401": # Missing/invalid access or refresh token
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # --- User Paths ---
+  /users/current:
+    get:
+      tags: [Users]
+      summary: Get Current User Profile
+      description: Retrieves the profile of the currently authenticated user.
+      operationId: getCurrentUser
+      # security: uses default bearerAuth
+      responses:
+        "200":
+          description: Current user profile data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    put:
+      tags: [Users]
+      summary: Update Current User Profile
+      description: Updates the profile of the currently authenticated user.
+      operationId: updateCurrentUser
+      # security: uses default bearerAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdateInput"
+      responses:
+        "200":
+          description: User profile updated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User" # Returns the updated user
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404": # Should ideally not happen if authenticated
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Users]
+      summary: Delete Current User Account
+      description: Deletes the account of the currently authenticated user and their associated data.
+      operationId: deleteCurrentUser
+      # security: uses default bearerAuth
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /users/:
+    get:
+      tags: [Users]
+      summary: Get All Users (Admin)
+      description: Retrieves a paginated list of all users. Admin role required.
+      operationId: getAllUsers
+      # security: uses default bearerAuth (Implicitly checks role via middleware)
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: A list of users.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedUsers"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation" # For query params
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get User by ID (Admin)
+      description: Retrieves profile information for a specific user. Admin role required.
+      operationId: getUserById
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: Specific user profile data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400": # Invalid userId format
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Users]
+      summary: Delete User by ID (Admin)
+      description: Deletes a specific user account and their associated data. Admin role required.
+      operationId: deleteUserById
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "400": # Invalid userId format
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin
+          $ref: "#/components/responses/Forbidden"
+        "404": # User not found (though might return 204 even if not found depending on implementation)
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # --- Blog Paths ---
+  /blogs/:
+    post:
+      tags: [Blogs]
+      summary: Create Blog Post (Admin)
+      description: Creates a new blog post. Requires banner image upload. Admin role required.
+      operationId: createBlog
+      # security: uses default bearerAuth
+      requestBody:
+        required: true
+        content:
+          multipart/form-data: # Specify multipart for file upload
+            schema:
+              $ref: "#/components/schemas/BlogInput"
+            encoding:
+              # Optional: Specify encoding for properties if needed, especially for file part
+              banner_image:
+                contentType: image/png, image/jpeg, image/webp
+      responses:
+        "201":
+          description: Blog post created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blog:
+                    $ref: "#/components/schemas/Blog"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin
+          $ref: "#/components/responses/Forbidden"
+        "413": # Payload Too Large
+          description: Uploaded file exceeds size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: ValidationError
+                message: File size must be less than 2MB
+        "500":
+          $ref: "#/components/responses/ServerError"
+    get:
+      tags: [Blogs]
+      summary: Get All Blogs
+      description: Retrieves a paginated list of blogs. Admins see all; users see only 'published'. Sorted by creation date descending.
+      operationId: getAllBlogs
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: A list of blogs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedBlogs"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation" # For query params
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /blogs/user/{userId}:
+    get:
+      tags: [Blogs]
+      summary: Get Blogs by User
+      description: Retrieves a paginated list of blogs by a specific user. Admins see all; users see only 'published'. Sorted by creation date descending.
+      operationId: getBlogsByUser
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - $ref: "#/components/parameters/LimitParam"
+        - $ref: "#/components/parameters/OffsetParam"
+      responses:
+        "200":
+          description: A list of blogs by the specified user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedBlogs"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /blogs/{slug}:
+    get:
+      tags: [Blogs]
+      summary: Get Blog by Slug
+      description: Retrieves a single blog post by its unique slug. Regular users cannot view 'draft' posts.
+      operationId: getBlogBySlug
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogSlugParam"
+      responses:
+        "200":
+          description: The requested blog post.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blog:
+                    $ref: "#/components/schemas/Blog"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # User attempts to access draft
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /blogs/{blogId}:
+    put:
+      tags: [Blogs]
+      summary: Update Blog Post (Admin)
+      description: Updates an existing blog post. Banner update optional. Admin role required (route security).
+      operationId: updateBlog
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogIdParam"
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/BlogUpdateInput"
+            encoding:
+              banner_image:
+                contentType: image/png, image/jpeg, image/webp
+      responses:
+        "200":
+          description: Blog post updated successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blog:
+                    $ref: "#/components/schemas/Blog"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin (or potentially not author if check was active)
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413": # Payload Too Large
+          description: Uploaded file exceeds size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Blogs]
+      summary: Delete Blog Post (Admin)
+      description: Deletes a blog post by ID. Also removes banner. Admin role required (route security).
+      operationId: deleteBlog
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogIdParam"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # If user is not admin (or potentially not author if check was active)
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # --- Like Paths ---
+  /likes/blog/{blogId}:
+    post:
+      tags: [Likes]
+      summary: Like Blog Post
+      description: Adds a like to a specific blog post. Increments likes count.
+      operationId: likeBlog
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogIdParam"
+      responses:
+        "200":
+          description: Blog liked successfully. Returns new likes count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  likesCount:
+                    type: integer
+              example:
+                likesCount: 15
+        "400": # Already liked
+          description: User has already liked this blog.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: BadRequest
+                message: You already liked this blog
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404": # Blog not found
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    delete:
+      tags: [Likes]
+      summary: Unlike Blog Post
+      description: Removes a like from a specific blog post. Decrements likes count.
+      operationId: unlikeBlog
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogIdParam"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "400": # Like not found
+          description: User has not liked this blog previously.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: BadRequest
+                message: Like not found
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404": # Blog not found
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  # --- Comment Paths ---
+  /comments/:
+    post:
+      tags: [Comments]
+      summary: Create Comment
+      description: Adds a new comment to a specific blog post. Increments comments count.
+      operationId: createComment
+      # security: uses default bearerAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentInput"
+      responses:
+        "201":
+          description: Comment created successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comment:
+                    $ref: "#/components/schemas/Comment"
+        "400":
+          $ref: "#/components/responses/BadRequestValidation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404": # Blog not found
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /comments/blog/{blogId}:
+    get:
+      tags: [Comments]
+      summary: Get Comments by Blog
+      description: Retrieves all comments associated with a specific blog post.
+      operationId: getCommentsByBlog
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/BlogIdParam"
+      responses:
+        "200": # Should be 200 OK for GET
+          description: A list of comments for the blog.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Comment"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404": # Blog not found
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /comments/{commentId}:
+    delete:
+      tags: [Comments]
+      summary: Delete Comment
+      description: Deletes a specific comment. Requires user to be author or admin. Decrements comments count.
+      operationId: deleteComment
+      # security: uses default bearerAuth
+      parameters:
+        - $ref: "#/components/parameters/CommentIdParam"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403": # Insufficient permissions
+          $ref: "#/components/responses/Forbidden"
+        "404": # Comment or Blog not found
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
